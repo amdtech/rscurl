@@ -143,6 +143,20 @@ function create_server () {
 			;;
 	esac
 }
+
+# Creates a new Shared IP Group
+# REQUIRES: 1=AuthToken 2=RS_Management_Server 3=SharedIpGroupName
+# OPTIONAL: 4=ServerID
+function create_shared_ip_group () {
+	if [[ $4 -ne "" ]]; then
+		RSPOST="{\"sharedIpGroup\":{\"name\":\"$3\",\"server\":$4}}"
+	else
+		RSPOST="{\"sharedIpGroup\":{\"name\":\"$3\"}}"
+	fi
+	RC=`curl -s -X POST -H X-Auth-Token:\ $1 -H Content-Type:\ application/json --data $RSPOST $2/shared_ip_groups|tr -s [:cntrl:] "\n"`
+	echo $RC
+}
+
 #Creates a new server image based on an existing server.
 #REQUIRES: 1=AuthToken 2=RS_Management_Server 3=Server_ID_to_be_imaged
 #OPTIONAL: 4=Name_of_new_image
@@ -190,6 +204,32 @@ function get_servers () {
 	SERVERS=`curl -s -X GET -H X-Auth-Token:\ $1 $2/servers|tr -s [:cntrl:] "\n" \
 	    |sed -e 's/{"servers":\[{//' -e 's/}\]}//' -e 's/},{/;/g' -e 's/"id"://g' -e 's/"name"://g'`
 }
+
+# Retrieves the current API limits from Rackspace
+# REQUIRES: 1=AuthToken 2=RS_Management_Server
+function get_limits() {
+	LIMITS=`curl -s -X GET -H X-Auth-Token:\ $1 $2/limits|tr -s [:cntrl:] "\n"`
+}
+
+# Retrieves the list of Shared IP Groups
+# REQUIRES: 1=AuthToken 2=RS_Management_Server
+function list_shared_ip_groups() {
+	SHARED_IP_GROUPS=`curl -s -X GET -H X-Auth-Token:\ $1 $2/shared_ip_groups|tr -s [:cntrl:] "\n"`
+}
+
+# Retrieves the list of Shared IP Groups, with details
+# REQUIRES: 1=AuthToken 2=RS_Management_Server
+function list_shared_ip_groups_detail() {
+	SHARED_IP_GROUPS_DETAIL=`curl -s -X GET -H X-Auth-Token:\ $1 $2/shared_ip_groups/detail|tr -s [:cntrl:] "\n"`
+}
+
+# Retrieves the Shared IP Group Details
+# REQUIRES: 1=AuthToken 2=RS_Management_Server 3=GroupId
+function get_shared_ip_group () {
+	SHARED_IP_GROUP=`curl -s -X GET -H X-Auth-Token:\ $1 $2/shared_ip_groups/$3|tr -s [:cntrl:] "\n"`
+	echo $SHARED_IP_GROUP
+}
+
 #Retreives the backups for the provided server
 #REQUIRES: 1=AuthToken 2=RS_Management_Server 3=Server_ID
 function get_backups () {
@@ -266,6 +306,25 @@ function print_images () {
 		fi
 	done
 }
+
+# Prints the current limits of the API
+function print_limits() {
+	get_limits $TOKEN $MGMTSVR
+	echo $LIMITS
+}
+
+# Prints the shared ip group list
+function print_shared_ip_groups() {
+	list_shared_ip_groups $TOKEN $MGMTSVR
+	echo $SHARED_IP_GROUPS
+}
+
+# Prints the shared ip group list, with details
+function print_shared_ip_groups_detail() {
+	list_shared_ip_groups_detail $TOKEN $MGMTSVR
+	echo $SHARED_IP_GROUPS_DETAIL
+}
+
 #Reboot server
 # REQUIRES: 1=AuthToken 2=RS_Management_Server 3=Server_ID_To_Be_Rebooted 4="HARD"|"SOFT"
 # Soft reboot sends the host OS a signal to reboot.
@@ -331,7 +390,7 @@ if [ $# -lt 6 ]
 	exit 1
 fi
 #Get options from the command line.
-while getopts "u:a:c:s:n:i:f:hq" option
+while getopts "u:a:c:s:n:i:f:g:hq" option
 do
 	case $option in
 		u	) RSUSER=$OPTARG ;;
@@ -339,8 +398,9 @@ do
 		c	) MYCOMMAND=$OPTARG ;;
 		s	) RSSERVID=$OPTARG ;;
 		n	) MYNAME=$OPTARG ;;
-		i	) RSIMAGEID=$OPTARG ;;
+		i	) MYID=$OPTARG; RSIMAGEID=$OPTARG ;;
 		f	) RSFLAVORID=$OPTARG ;;
+		g	) SIP_GROUP=$OPTARG ;;
 		h	) usage;exit 0 ;;
 		q	) QUIET=1 ;;
 	esac
@@ -366,8 +426,31 @@ fi
 case $MYCOMMAND in
 	list-servers	) print_servers ;;
 	list-flavors	) print_flavors ;;
-	list-images		) print_images ;;
+	list-images	) print_images ;;
 	list-backups	) print_backups ;;
+	list-shared-ip-groups	) print_shared_ip_groups ;;
+	list-shared-ip-groups-detail	) print_shared_ip_groups_detail ;;
+	get-limits	) print_limits ;;
+	get-shared-ip-group	)
+		if test -z $MYID
+			then
+			if [[ $QUIET -eq 0 ]]; then
+				echo Shared IP Group ID not provided
+			fi
+			exit 98
+		fi
+		get_shared_ip_group $TOKEN $MGMTSVR $MYID
+		;;
+	delete-shared-ip-group	)
+		if test -z $MYID
+			then
+			if [[ $QUIET -eq 0 ]]; then
+				echo Shared IP Group ID not provided
+			fi
+			exit 98
+		fi
+		rsdelete $TOKEN $MGMTSVR $MYID "shared_ip_groups"
+		;;
 	delete-server	) 
 		if test -z $RSSERVID
 			then 
@@ -400,6 +483,16 @@ case $MYCOMMAND in
 			exit 98
 		fi
 		create_server $TOKEN $MGMTSVR $MYNAME $RSIMAGEID $RSFLAVORID ;;
+	create-shared-ip-group	)
+		if test -z "$MYNAME"
+			then
+			if [[ $QUIET -eq 0 ]]; then
+				echo Shared IP Group Name not provided
+			fi
+			exit 98
+		fi
+		create_shared_ip_group $TOKEN $MGMTSVR $MYNAME $RSSERVID
+		;;
 	reboot			) 
 		if test -z $RSSERVID
 			then 
