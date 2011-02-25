@@ -157,6 +157,14 @@ function create_shared_ip_group () {
 	echo $RC
 }
 
+# Updates a server's password
+# REQUIRES: 1=AuthToken 2=RS_Management_Server 3=ServerID 4=NewPassword
+function update_password () {
+	echo $PASSWORD
+	RSPOST="{\"server\" :{\"adminPass\" : \"$4\"}}"
+	RC=`curl -s -X POST -H X-Auth-Token:\ $1 -H Content-Type:\ application/json --data $RSPOST $2/servers/$3|tr -s [:cntrl:] "\n"`
+}
+
 #Creates a new server image based on an existing server.
 #REQUIRES: 1=AuthToken 2=RS_Management_Server 3=Server_ID_to_be_imaged
 #OPTIONAL: 4=Name_of_new_image
@@ -390,7 +398,7 @@ if [ $# -lt 6 ]
 	exit 1
 fi
 #Get options from the command line.
-while getopts "u:a:c:s:n:i:f:g:hq" option
+while getopts "u:a:c:s:n:i:f:g:p:hq" option
 do
 	case $option in
 		u	) RSUSER=$OPTARG ;;
@@ -401,6 +409,7 @@ do
 		i	) MYID=$OPTARG; RSIMAGEID=$OPTARG ;;
 		f	) RSFLAVORID=$OPTARG ;;
 		g	) SIP_GROUP=$OPTARG ;;
+		p	) PASSWORD=$OPTARG ;;
 		h	) usage;exit 0 ;;
 		q	) QUIET=1 ;;
 	esac
@@ -450,6 +459,23 @@ case $MYCOMMAND in
 			exit 98
 		fi
 		rsdelete $TOKEN $MGMTSVR $MYID "shared_ip_groups"
+		;;
+	update-password	)
+		if test -z $RSSERVID
+			then
+			if [[ $QUIET -eq 0 ]]; then
+				echo Server ID not provided
+			fi
+			exit 98
+		fi
+		if test -z "$PASSWORD"
+			then 
+			if [[ $QUIET -eq 0 ]]; then
+				echo New Password not provided
+			fi
+			exit 98
+		fi
+		update_password $TOKEN $MGMTSVR $RSSERVID $PASSWORD
 		;;
 	delete-server	) 
 		if test -z $RSSERVID
